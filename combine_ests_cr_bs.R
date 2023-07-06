@@ -28,7 +28,7 @@ colnames(results_allB) <- c('B', 'M', paste0('beta', 0:2))
 ## POINT ESTIMATES
 ################################################################################
 
-cat('    Calculating pooled point estimates \n')
+cat('   Calculating pooled point estimates \n')
 
 beta0_BM <- mean(results_allB$beta0)
 beta1_BM <- mean(results_allB$beta1)
@@ -38,7 +38,7 @@ beta2_BM <- mean(results_allB$beta2)
 ## VARIANCE/COVARIANCE ESTIMATES
 ################################################################################
 
-cat('    Calculating pooled variance estimates \n')
+cat('   Calculating pooled variance estimates \n')
 
 # for calculating mean sum of squares (w/in & b/n bootstraps)
 calc_mss <- function(coef_names, results){

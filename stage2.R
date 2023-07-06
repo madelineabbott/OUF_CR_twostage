@@ -8,7 +8,7 @@ library(kableExtra)
 pal <- c("#F6AD4F", "#6CB9A9", "#49A5D6", "#A45336")
 
 # Set your working directory
-wd <- ''
+wd <- '/Users/madelineabbott/Dropbox/Dissertation/BreakFree/Break_Free_RealDat/Final Code/Github_example/'
 
 # Load some useful functions used during the estimation approach
 source(file = paste0(wd, 'functions_ouf_cr.R'))
@@ -16,8 +16,8 @@ source(file = paste0(wd, 'functions_ouf_cr.R'))
 Rcpp::sourceCpp(paste0(wd, "ou_precision_matrix.cpp"))
 
 # Select set of true parameters under which data were simulated
-# setting <- 1 # high autocorrelation, low noise
-setting <- 2 # low autocorrelation, high noise
+setting <- 1 # high autocorrelation, low noise
+# setting <- 2 # low autocorrelation, high noise
 
 # Set number of bootstrapped subsamples
 B <- 200
@@ -32,27 +32,28 @@ g <- 0
 ################################################################################
 ## Read in data
 ################################################################################
- 
-dat_cumulative <- read.csv(paste0(wd, 'data/sim_dat_setting', setting, '.csv'))
 
-# variables in this dataset are defined as:
+# dat_long contains info on the longitudinal outcomes
+dat_long <- read.csv(paste0(wd, 'data/sim_dat_long_setting', setting, '.csv'))
 # - user.id = ID for each individual
-# - start_time = left endpoint of event interval
+# - time = time of measurement occasion
+# - active-calm = measured longitudinal outcomes
+
+# dat_event contains info on the cumulative event outcome
+dat_event <- read.csv(paste0(wd, 'data/sim_dat_event_setting', setting, '.csv'))
+# - user.id = ID for each individual
+# - start_time = time at left endpoint of event interval
 # - avg_time = time at midpoint of event interval
-# - stop_time = right endpoint of event interval
-# - Y = cumulative # of events per interval (e.g., num. cigs. smoked)
+# - stop_time = time at right endpoint of event interval
+# - Y = cumulative number of events over this interval (e.g., # cig. smoked)
 # - smoking_interval_width = width of event interval
 # - smoke_int_id = within-individual ID for event intervals
-# - obs_eta1_start = value of latent factor 1 at left endpoint of event interval
-# - obs_eta1_stop = value of latent factor 1 at right endpoint of event interval
-# - obs_eta2_start = value of latent factor 2 at left endpoint of event interval
-# - obs_eta2_stop = value of latent factor 2 at right endpoint of event interval
 
 # Set sample size (number of individuals)
-N <- length(unique(dat_cumulative$user.id))
+N <- length(unique(dat_event$user.id))
 
 ################################################################################
-## Bootstrap data and generate sythetic averages for latent factors
+## Define parameter values for OU factor model
 ################################################################################
 
 # Define parameter values for the OU process--in the simulation studies, we use
@@ -68,6 +69,120 @@ if (setting == 1){
   sigma_boup <- diag(c(4, 2))
 }
 p <- 2 # number of latent factors
+
+# Define the other parameter matrices for the factor model
+k <- 18 # number of longitudinal outcomes
+# Loadings matrix
+Lambda <- matrix(c(0.821417185543206, 1.04458936956176,  0.876022383305528,
+                   1.15900379444142,  0.810453790515167, 1.27250510014226, 
+                   0.977819548205204, 1.14797926196996,  0.920847738140797,
+                   rep(0, k),
+                   1.18590850472731,  0.933236770307851, 1.24427973818947,
+                   0.998974149217919, 1.16065757530552,  0.863549197572027,
+                   1.01794611269844,  1.25405361079317,  1.05959968113476),
+                 ncol = p)
+
+# Set factor model parameters
+# Covariance matrix for random intercepts
+Sigma_u <- diag(rep(0, k))
+# Covariance matrix for measurement error
+Sigma_e <- diag(rep(0.1, k))
+
+
+################################################################################
+## Predict factor scores at measurement occasions
+################################################################################
+
+# Calculate number of measurement occasions per person
+measurement_n <- as.numeric(table(dat_long$user.id))
+max_ni <- max(measurement_n)
+
+# Set up measurement times for each individual
+measurement_times <- matrix(nrow = N, ncol = max_ni)
+for (i in 1:N){
+  ni <- measurement_n[i]
+  measurement_times[i,1:ni] <- dat_long$time[dat_long$user.id == i]
+}
+
+# Calculate covariance matrix for latent factors (OU process) for each individual
+Psi_list <- lapply(1:N, FUN = function(i){
+  ni <- measurement_n[i]
+  meas_times_i <- measurement_times[i, 1:ni]
+  theta_t = t(theta_boup)
+  sigma2_vec = matrix(sigma_boup %*% t(sigma_boup), ncol = 1)
+  kron_sum_theta = kronsum(theta_boup, theta_boup)
+  ni = length(c(meas_times_i))
+  Omega_i <- calc_precision_cpp(kron_sum_theta = kron_sum_theta, theta = theta_boup,
+                                theta_t = theta_t, sigma2_vec = sigma2_vec,
+                                ni = ni, times = c(meas_times_i))
+  Psi_i <- solve(Omega_i)
+  Psi_i <- (Psi_i + t(Psi_i))/2
+  Psi_i
+})
+
+# Calculate covariance matrix for observed longitudinal outcome for each
+#  individual using OU factor model parameter values
+CovX_list <- lapply(1:N, FUN = function(i){
+  meas_times_i <- dat_long$time[which(dat_long$user.id == i)]
+  ni <- length(meas_times_i)
+  Psi_i <- Psi_list[[i]] # covariance matrix for latent factors (OU process covar.)
+  Lambda_mat <- kronecker(diag(ni), Lambda) %*% Psi_i %*% kronecker(diag(ni), t(Lambda))
+  Sigma_u_mat <- kronecker(matrix(1, nrow = ni, ncol = ni), Sigma_u)
+  Sigma_e_mat <- kronecker(diag(ni), Sigma_e)
+  
+  # Cov(X_i), covariance for observed long. outcomes
+  Lambda_mat + Sigma_u_mat + Sigma_e_mat
+})
+
+# Set up matrix of observed longitudinal outcomes
+all_person_X <- matrix(NA, nrow = N, ncol = k*max_ni)
+for (i in 1:N){
+  obs_X <- dat_long %>%
+    filter(user.id == i) %>%
+    dplyr::select(c('active', 'calm', 'determined', 'enthusiastic', 'grateful',
+                    'happy', 'proud', 'joyful', 'attentive',
+                    'angry', 'ashamed', 'disgusted', 'guilty', 'irritable',
+                    'lonely', 'nervous', 'sad', 'scared'))
+  ni <- nrow(obs_X)
+  nrow_CovX <- ni * k
+  all_person_X[i, 1:nrow_CovX] <- matrix(c(t(obs_X)), nrow = 1)
+}
+
+
+# Predict factor scores 
+factor_scores <- predict_eta(measurement_n, Lambda, Psi_list,
+                             all_person_X, CovX_list)
+factor_scores <- data.frame(factor_scores)
+colnames(factor_scores) <- c('eta1', 'eta2') 
+factor_scores <- factor_scores %>%
+  mutate(user.id = rep(1:length(measurement_n), measurement_n))
+dat_long <- dat_long %>%
+  mutate(eta1 = factor_scores$eta1, eta2 = factor_scores$eta2)
+# these factor scores, called eta1 and eta2 for the two latent factors,
+#    could represent affective states of positive affect and negative affect
+
+# Now that we've generate factor scores, we'll drop the observed long. outcomes
+dat_long <- dat_long %>%
+  dplyr::select(c(user.id, time, eta1, eta2))
+
+# Combine the factor scores and the event information
+dat_cumulative <- left_join(dat_event, dat_long, by = c('user.id' = 'user.id',
+                                                        'start_time' = 'time'))
+dat_cumulative <- dat_cumulative %>%
+  mutate(obs_eta1_start = eta1, obs_eta1_stop = lead(eta1),
+         obs_eta2_start = eta2, obs_eta2_stop = lead(eta2)) %>%
+  dplyr::select(-c(eta1, eta2)) %>%
+  filter(complete.cases(.))
+# These new variables are defined as
+# - obs_eta1_start = value of latent factor 1 at left endpoint of event interval
+# - obs_eta1_stop = value of latent factor 1 at right endpoint of event interval
+# - obs_eta2_start = value of latent factor 2 at left endpoint of event interval
+# - obs_eta2_stop = value of latent factor 2 at right endpoint of event interval
+
+
+################################################################################
+## Bootstrap data and generate synthetic averages for latent factors
+################################################################################
 
 # Bootstrap original data and augment by generating R sythetic values for the
 #  average of the latent factors across each event interval for all individuals
@@ -116,7 +231,7 @@ write.csv(x = VAR$var,
 ## Forest plot of point estimates and 95% confidence intervals
 ################################################################################
 
-# Set values of true betas (cumul. risk coeffs) to add to plot
+# Set values of true betas (cumulative risk model coeffs) to add to plot
 if (setting == 1){
   final_results$true_values <- c(-2.4, -0.9,  1)
 }else if (setting == 2){

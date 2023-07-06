@@ -85,7 +85,7 @@ all_etas <- all_etas %>%
 # Step 2: Incorporate cumulative cig counts
 ################################################################################
 
-cat('Step 2: incorporating cumulative event counts \n')
+cat('   Step 2: incorporating cumulative event counts \n')
 
 all_etas <- all_etas %>%
   group_by(ibs, m, r) %>%

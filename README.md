@@ -9,4 +9,4 @@ This repository contains code for the second stage of estimation.  To fit the cu
 4. A weighted Poisson regression model is fit to each bootstrapped dataset.
 5. Point estimates and standard errors are pooled across the bootstrapped datasets.
 
-Two example datasets are provided in the [data](/data) directory.  These datasets differ in true OU process that underlies the observed longitudinal outcomes--setting 1 corresponds to an easier setting for estimation (lower noise, higher autocorrelation) and setting 2 corresponds to a more difficult setting for estimation (higher noise, lower autocorrelation).
+Two sets of example data are provided in the [data](/data) directory.  Each set consists of a file containing the longitudinal outcome data and a file containing the cumulative event outcome data.  These sets of example data differ in true OU process that underlies the observed longitudinal outcomes--setting 1 corresponds to an easier setting for estimation (lower noise, higher autocorrelation) and setting 2 corresponds to a more difficult setting for estimation (higher noise, lower autocorrelation).

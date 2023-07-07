@@ -234,9 +234,8 @@ write.csv(x = VAR$var,
 # Set values of true betas (cumulative risk model coeffs) to add to plot
 if (setting == 1){
   final_results$true_values <- c(-2.4, -0.9,  1)
-}else if (setting == 2){
+} else if (setting == 2){
   final_results$true_values <- c(-2.2, -0.6,  0.8)
-  
 }
 
 # True values are indicated with black circles in the plot while colored dots and

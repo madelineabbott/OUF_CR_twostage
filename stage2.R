@@ -8,7 +8,7 @@ library(kableExtra)
 pal <- c("#F6AD4F", "#6CB9A9", "#49A5D6", "#A45336")
 
 # Set your working directory
-wd <- '/Users/madelineabbott/Dropbox/Dissertation/BreakFree/Break_Free_RealDat/Final Code/Github_example/'
+wd <- ''
 
 # Load some useful functions used during the estimation approach
 source(file = paste0(wd, 'functions_ouf_cr.R'))

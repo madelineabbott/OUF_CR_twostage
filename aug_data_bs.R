@@ -1,6 +1,6 @@
 ################################################################################
-# BOOTSTRAP DATA AND SAMPLE SYNTHETIC AVERAGE VALUES OF LATENT FACTORS FOR 
-# FITTING THE CUMULATIVE RISK MODEL AND ESTIMATING STANDARD ERRORS
+## Bootstrap individuals and augment data with by sampling multiple average   ##
+##               values of the latent process for each interval               ##
 ################################################################################
 
 # This file bootstraps the simulated data and then augments each bootstrapped
@@ -21,13 +21,13 @@ all_etas <- matrix(nrow = 0, ncol = 8,
                                      'avg_eta1', 'avg_eta2')))
 
 
-
-set.seed(214+b+g) # set new seed for boostrapped sample
+set.seed(214+b+g) # set new seed for bootstrapped sample
 # Bootstrap individual IDs
 subsample_id <- sample(x = 1:N, size = N, replace =  TRUE)
-# note that we don't use event/smoking info when generating sythetic average values
+# note that we don't use event/smoking info when generating synthetic average
+#  values (this is why we use weights later in the Poisson regression)
 
-for (ibs in 1:length(subsample_id)){ # ibs = unique ID for bootstrapping
+for (ibs in 1:length(subsample_id)){ # ibs = unique user id for bootstrapping
   i <- subsample_id[ibs]
   avg_etas_i <- data.frame(matrix(NA, nrow = 0, ncol = 6,
                                   dimnames = list(NULL, c('m', 'r',
@@ -43,19 +43,20 @@ for (ibs in 1:length(subsample_id)){ # ibs = unique ID for bootstrapping
   # measurement times
   meas_times_i <- c(cur_dat$start_time, cur_dat$stop_time[ni])
   
-  # Augment data with synthetic average values of latent factors, or etas
+  # Augment data with synthetic average values of latent factors (etas)
+  
   # Von Hippel approach to standard error estimation uses multiple imputation
   #  within each bootstrapped sample
   # m indexes the imputation
   for (m in 1:M){
     #cat('  m =', m, '\n')
     # Assume etas at endpoints of intervals are known but avg eta is unknown
-    # We directly sample the mean of the factor, given known values at endpoints
+    # We directly sample the mean of the factors, given known values at endpoints
     cur_etas <- data.frame(time = meas_times_i, # times defining event intervals
-                           eta1 = eta1_anchors, # factor 1 at endpoints
-                           eta2 = eta2_anchors) # factor 2 at endpoints
+                           eta1 = eta1_anchors, # factor 1 at endpoints of interval
+                           eta2 = eta2_anchors) # factor 2 at endpoints of interval
     
-    # Sample average eta R times
+    # Sample average eta R times (actually R+1 but we'll drop the extra later)
     aug_avg_etas <- sample_avg_etas_for_sims(obs_dat = cur_etas,
                                              theta = theta_boup,
                                              sigma = sigma_boup,
@@ -81,6 +82,10 @@ cat('       Done with eta augmentation \n')
 all_etas <- all_etas %>%
   filter(start_time >= 0)
 
+# r = 0 is left over from generating the true data, so we drop this set of values
+all_etas <- all_etas %>%
+  filter(r > 0)
+
 ################################################################################
 # Step 2: Incorporate cumulative cig counts
 ################################################################################
@@ -96,16 +101,11 @@ all_etas <- all_etas %>%
   dplyr::select(c(ibs, i, m, r, smoke_int_id, avg_time,
                   smoking_interval_width, avg_eta1, avg_eta2))
 
-# add event (cig info) to augmented etas for this boostrapped subset
+# add event (cig info) to augmented etas for this bootstrapped subset
 true_cigs <- dat_cumulative %>% 
   dplyr::select(c(user.id, smoke_int_id, Y))
 dat_cumulative_bs <- left_join(all_etas, true_cigs,
                                by = c('i' = 'user.id', 'smoke_int_id'))
-
-
-
-
- 
 
 
 

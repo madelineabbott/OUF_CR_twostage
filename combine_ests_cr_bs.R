@@ -1,13 +1,12 @@
 ################################################################################
-## COMBINE PARAMETER ESTIMATES ACROSS THE BOOTSTRAPPED AND IMPUTED DATASETS
+##         Pool results across the fitted cumulative risk models              ##
 ################################################################################
 
-# PURPOSE: this file combines estimates from the cumulative risk model fit to
-#  the bootstrapped and multiply imputed subsamples of the data and then also
-#  estimates variances the von Hippel approach.
+# This file combines estimates from the cumulative risk model fit to the
+#  bootstrapped and augmented datasets following the von Hippel approach.
 
 ################################################################################
-## READ IN ALL POINT ESTIMATES
+## Read in results from fitted models
 ################################################################################
 
 results_allB <- matrix(nrow = 0, ncol = 5,
@@ -25,7 +24,7 @@ for (b in 1:B){
 colnames(results_allB) <- c('B', 'M', paste0('beta', 0:2))
 
 ################################################################################
-## POINT ESTIMATES
+## Point estimates
 ################################################################################
 
 cat('   Calculating pooled point estimates \n')
@@ -35,7 +34,7 @@ beta1_BM <- mean(results_allB$beta1)
 beta2_BM <- mean(results_allB$beta2)
 
 ################################################################################
-## VARIANCE/COVARIANCE ESTIMATES
+## Variance/covariance estimates (using von Hippel approach)
 ################################################################################
 
 cat('   Calculating pooled variance estimates \n')
@@ -97,7 +96,7 @@ MSS <- calc_mss(coef_names, results = results_allB)
 VAR <- calc_var(MSB = MSS$MSB, MSW = MSS$MSW)
 
 ################################################################################
-# SAVE RESULTS
+# Save results
 ################################################################################
 
 final_results <- data.frame(variable = paste0('beta', 0:2),

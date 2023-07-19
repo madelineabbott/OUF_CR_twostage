@@ -1,0 +1,2 @@
+Bootstrapped and augmented datasets will be saved in this folder.  This
+file serves only as a placeholder.

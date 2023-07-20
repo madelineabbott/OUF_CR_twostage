@@ -11,3 +11,5 @@ This repository contains code for the second stage of estimation.  To fit the cu
 6. Point estimates and standard errors are pooled across the bootstrapped datasets.
 
 Two sets of example data are provided in the [data](/data) directory.  Each set consists of a file containing the longitudinal outcome data and a file containing the cumulative event outcome data.  These sets of example data differ in the true OU process that underlies the observed longitudinal outcome; setting 1 corresponds to an easier setting for estimation (lower noise, higher autocorrelation) and setting 2 corresponds to a more difficult setting for estimation (higher noise, lower autocorrelation).
+
+For questions, please contact mrabbott@umich.edu.

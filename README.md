@@ -6,7 +6,7 @@ This repository contains code for the second stage of estimation.  To fit the cu
 1. Simulated data--for both the longitudinal and event outcomes--are imported from the [data](/data) directory. 
 2. Factor scores are predicted at the measurement occasions using the dynamic factor model parameters.
 3. Individuals within the dataset are bootstrapped.
-4. Synthetic average values of the latent process are generated for each event interval, conditional on the predicted factor scores, for each bootstrapped dataset.
+4. Synthetic average values of the latent process are generated for each event interval, conditional on the factor scores predicted at measurement occasions, for each bootstrapped dataset.
 5. A weighted Poisson regression model is fit to each bootstrapped dataset augmented with the synthetic average values of the latent process.
 6. Point estimates and standard errors are pooled across the bootstrapped datasets.
 

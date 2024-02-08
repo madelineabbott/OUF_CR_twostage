@@ -1,9 +1,11 @@
 # Joint OU factor model and cumulative risk model
 Code for fitting dynamic Ornstein-Uhlenbeck (OU) factor model and cumulative risk model using a weighted two-stage approach.  Two sets of example data are provided in the [data](/data) directory.  Each set consists of a file containing the longitudinal outcome data and a file containing the cumulative event outcome data.  These sets of example data differ in the true OU process that underlies the observed longitudinal outcome; setting 1 corresponds to a setting in which the true OU process has higher correlation and setting 2 corresponds to a setting in which the true OU process has lower correlation.
 
-In **stage 1**, the OU factor model is fit using just data on the longitudinal outcomes.  To carry out stage 1, run **stage1.R**.  More details on stage 1 estimation can be found [here](https://github.com/madelineabbott/OUF).
+To fit this model, first run **stage1.R** and then run **stage2.R**.
 
-In **stage2.R**, the cumulative risk model.  After carrying out stage 1 of estimation, stage 2 can be completed by running **stage2.R**.  This R file uses results from stage 1 to carry out the following steps:
+In **stage 1**, the OU factor model is fit using just data on the longitudinal outcomes.  More details on stage 1 estimation can be found [here](https://github.com/madelineabbott/OUF).
+
+In **stage2**, the cumulative risk model is fit.  Stage 2 uses results from stage 1 to carry out the following steps:
 
 1. Factor scores are predicted at the measurement occasions using the dynamic factor model parameters.
 2. Individuals within the dataset are bootstrapped.

@@ -17,7 +17,7 @@ library(nlme)
 library(parallel)
 
 ################################################################################
-## FOR OU COVARIANCE MATRIX
+## FACTOR MODEL IDENTIFIABILITY
 ################################################################################
 
 # Calculate Kronecker sum
@@ -25,25 +25,6 @@ kronsum <- function(A, B){
   dimA <- nrow(A)
   dimB <- nrow(B)
   kronecker(A, diag(dimB)) + kronecker(diag(dimA), B)
-}
-
-# for marginal covariance (if eta(t_0) is unknown)
-Gamma2 <- function(theta_ou, sigma_ou, t, s){ # t <= s
-  if(t > s){
-    return('error: t <= s is required')
-  }
-  theta_ks <- kronsum(theta_ou, theta_ou)
-  theta_ks.inv <- solve(theta_ks)
-  
-  term1 <- theta_ks.inv
-  term2 <- expm(t*theta_ks - kronsum(theta_ou*t, theta_ou*s))
-  term3 <- matrix(sigma_ou %*% t(sigma_ou), ncol = 1)
-  
-  out <- matrix(term1 %*% term2 %*% term3,
-                nrow = nrow(theta_ou), ncol = nrow(theta_ou))
-  
-  return(t(as.matrix(out,
-                     row = nrow(theta_ou), ncol = nrow(theta_ou))))
 }
 
 
@@ -59,11 +40,6 @@ calc_sigma <- function(theta){
   sigma2_solutions <- c(solve(X, Y))
   return(sqrt(sigma2_solutions))
 }
-
-
-################################################################################
-## FOR RE-SCALING OUP PARAMETERS TO SATISFY THE IDENTIFIABILITY CONSTRAINT
-################################################################################
 
 # Function for the covariance of the OU process (just the diagonal block)
 construct_V <- function(theta, sigma) {
@@ -115,9 +91,8 @@ calc_constants <- function(guess_constants_vec, theta, sigma){
 }
 # example: calc_constants(c(1, 1), theta, sigma)
 
-
 ################################################################################
-# ANALYTICAL GRADIENT (for measurement submodel block update)
+# Analytic gradient of dynamic OU factor model (for meas. submodel block update)
 ################################################################################
 
 # gradient w.r.t. Lambda
@@ -235,8 +210,7 @@ grad_theta <- function(log.theta_vec, Yi, Lambda, Sigma_u, Psi){
   for (i in 1:length(log.theta_vec)){
     J.k <- matrix(0, nrow = k, ncol = k)
     J.k[i,i] <- 2*exp(log.theta_vec[i])
-    # J.k[i,i] <- 2*(log.theta_vec[i]) 
-    
+
     Ci <- kronecker(diag(ni), J.k)
     term1 <- sum(diag(Sigma_star.inv %*% Ci))
     inside <- -Sigma_star.inv %*% Ci %*% Sigma_star.inv
@@ -245,8 +219,7 @@ grad_theta <- function(log.theta_vec, Yi, Lambda, Sigma_u, Psi){
   }
   
   return(-0.5*grad_vec*exp(log.theta_vec))
-  # return(-0.5*grad_vec) 
-  
+
 }
 
 # gradient of the log-likelihood for i w.r.t. all meas submod parameters
@@ -272,8 +245,7 @@ lli_grad <- function(m_params, Yi, Psi_i){
   cur_Sigma_u <- crossprod(R.Sigma_u) # parameterized using cholesky decomp
   # set up Sigma_e (called Theta here)
   cur_Theta <- diag((exp(log.theta_vec))^2) # parameterized as log(sigma_e)
-  # cur_Theta <- diag(((log.theta_vec))^2) 
-  
+
   ni = length(Yi)/k
   Sigma_star_inv <- calc_Sigma_star_inv(ni, cur_Lambda, cur_Sigma_u,
                                         cur_Theta, Psi_i)
@@ -284,7 +256,7 @@ lli_grad <- function(m_params, Yi, Psi_i){
     c(grad_sigma_e_cpp_slow(k, ni, Yi, cur_Theta, Sigma_star_inv)))
 }
 
-# gradient for negative log likelihood w.r.t FA parameters
+# gradient for negative log likelihood w.r.t MEAS. SUBMOD. parameters
 ll_grad <- function(m_params, all_person_Y_centered, Psi_list){
   # define non-zero indices of covariance matrices (for Sigma_u and Sigma_e)
   m <- diag(k)
@@ -341,7 +313,7 @@ ll_grad <- function(m_params, all_person_Y_centered, Psi_list){
 }
 
 ################################################################################
-#### Define FABOUP likelihood w.r.t FA parameters
+# OUF model likelihood w.r.t measurement submodel parameters (FA)
 ################################################################################
 
 # for single subject
@@ -389,19 +361,18 @@ FA_negllk <- function(m_params_vec, Psi_list){
 }
 
 ################################################################################
-#### Define FABOUP likelihood w.r.t OUP parameters
+# OUF model likelihood w.r.t structural submodel parameters (BOUP)
 ################################################################################
 
-### 1. Define likelihood for Y w.r.t. to BOUP parameters
+### 1. Define likelihood for Y w.r.t. to OUP parameters
 # NOTE: sigma is estimated on log scale
 BOUP_neg_loglik_i <- function(params, c_vec, i) {
-  # cat('person #:', i, '\n')
   theta_param_length = length(as.vector(theta_ou))
   theta_current = matrix(params[1:theta_param_length], nrow = nrow(theta_ou))
   sigma_current = diag(x = exp(params[(theta_param_length+1):length(params)]),
                        nrow = length(exp(params[(theta_param_length+1):length(params)])))
   
-  # Rescale BOUP parameters to satisfy the identifiability constraint
+  # Rescale OU parameters to satisfy the identifiability constraint
   theta_current <- update_theta(theta_current,
                                 diag(x = c_vec, nrow = length(c_vec)))
   sigma_current <- update_sigma(sigma_current,
@@ -455,7 +426,7 @@ BOUP_negloglik_n <- function(params, c_vec) {
 
 
 ################################################################################
-#### Define FABOUP likelihood w.r.t ALL parameters
+# OUF model likelihood w.r.t ALL parameters
 ################################################################################
 
 # for single subject
@@ -533,130 +504,24 @@ FABOUP_negloglik_n <- function(m_params_vec, calc_sigma = TRUE) {
 
 
 ################################################################################
-# FUNCTIONS FOR AUGMENTING LATENT PROCESS w/ SYNTHETIC VALUES OF ETA (not avg)
+# Functions for augmenting latent process w/ synthetic values of AVERAGE ETA
 ################################################################################
 
-# conditional mean of OU process, eta(t) | \eta(s), \eta(u)
-cond_mean <- function(eta_start, eta_stop, Psi, dt){
-  v_1 <- Psi[1 : nrow(theta_boup), 1 : nrow(theta_boup)]
-  psi_21 <- Psi[(nrow(theta_boup)+1) : (nrow(theta_boup)*2),
-                1 : nrow(theta_boup)]
-  psi_23 <- Psi[(nrow(theta_boup)+1) : (nrow(theta_boup)*2),
-                (2*nrow(theta_boup)+1) : (nrow(theta_boup)*3)]
-  psi_13 <- Psi[1 : nrow(theta_boup),
-                (2*nrow(theta_boup)+1) : (nrow(theta_boup)*3)]
-  psi_31 <- t(psi_13)
-  v_3 <- Psi[(2*nrow(theta_boup)+1) : (nrow(theta_boup)*3),
-             (2*nrow(theta_boup)+1) : (nrow(theta_boup)*3)]
-  
-  term1 <- cbind(psi_21, psi_23)
-  term2 <- solve(rbind(cbind(v_1, psi_13), cbind(psi_31, v_3)))
-  term3 <- rbind(eta_start, eta_stop)
-  
-  # conditional mean for eta(t) | \eta(s), \eta(u)
-  term1 %*% term2 %*% term3 
-}
-
-# conditional covariance of OU process, eta(t) | \eta(s), \eta(u)
-cond_var <- function(eta_start, eta_stop, Psi){
-  v_1 <- Psi[1 : nrow(theta_boup), 1 : nrow(theta_boup)]
-  psi_21 <- Psi[(nrow(theta_boup)+1) : (nrow(theta_boup)*2),
-                1 : nrow(theta_boup)]
-  psi_23 <- Psi[(nrow(theta_boup)+1) : (nrow(theta_boup)*2),
-                (2*nrow(theta_boup)+1) : (nrow(theta_boup)*3)]
-  psi_13 <- Psi[1 : nrow(theta_boup),
-                (2*nrow(theta_boup)+1) : (nrow(theta_boup)*3)]
-  psi_31 <- t(psi_13)
-  v_3 <- Psi[(2*nrow(theta_boup)+1) : (nrow(theta_boup)*3),
-             (2*nrow(theta_boup)+1) : (nrow(theta_boup)*3)]
-  psi_12 <- t(psi_21)
-  psi_32 <- Psi[(2*nrow(theta_boup)+1) : (nrow(theta_boup)*3),
-                (nrow(theta_boup)+1) : (nrow(theta_boup)*2)]
-  v2 <- Psi[(nrow(theta_boup)+1) : (nrow(theta_boup)*2),
-            (nrow(theta_boup)+1) : (nrow(theta_boup)*2)]
-  
-  term1 <- cbind(psi_21, psi_23)
-  term2 <- solve(rbind(cbind(v_1, psi_13), cbind(psi_31, v_3)))
-  term3 <- rbind(psi_12, psi_32)
-  
-  # conditional covariance for eta(t) | \eta(s), \eta(u)
-  v2 - term1 %*% term2 %*% term3
-}
-
-# draw a value of eta between eta_start and eta_stop
-draw_eta2 <- function(eta_start, eta_stop, Psi, dt){
-  cur_cond_mean <- cond_mean(eta_start, eta_stop, Psi, dt)
-  cur_cond_var <- cond_var(eta_start, eta_stop, Psi)
-  cur_cond_var <- (cur_cond_var + t(cur_cond_var))/2
-  mvtnorm::rmvnorm(1, mean = cur_cond_mean, sigma = cur_cond_var)
-}
-
-# eta augmentation with sheet (correlated)
-augment_etas <- function(dat, theta_boup, sigma_boup){
-  # dat should have a column for time and a column for each eta
-  cur_obs <- dat[,c('time', paste0('eta', 1:nrow(theta_boup)))]
-  obs_times <- sort(cur_obs$time)
-  obs_etas <- cur_obs[,c(paste0('eta', 1:nrow(theta_boup)))]
-  cur_max_gap = max(lag(cur_obs$time), na.rm = TRUE)
-  while(cur_max_gap > max_gap) {
-    for (j in 1:(length(obs_times)-1)){
-      start_time = obs_times[j]
-      stop_time = obs_times[j+1]
-      eta_start = matrix(unlist(obs_etas[j,]), ncol = 1)
-      eta_stop = matrix(unlist(obs_etas[j+1,]), ncol = 1)
-      
-      dt = stop_time - start_time
-      
-      # draw eta in the middle
-      if(dt > max_gap){
-        mid_time = dt/2 + start_time
-        
-        theta_t = t(theta_boup)
-        sigma2_vec = matrix(sigma_boup %*% t(sigma_boup), ncol = 1)
-        kron_sum_theta = kronsum(theta_boup, theta_boup)
-        times = c(start_time, mid_time, stop_time)
-        ni = length(times)
-        Omega <- calc_precision_cpp(kron_sum_theta = kron_sum_theta,
-                                    theta = theta_boup, theta_t = theta_t,
-                                    sigma2_vec = sigma2_vec,
-                                    ni = ni, times = times)
-        
-        Psi <- solve(Omega)
-        new_eta <- draw_eta2(eta_start, eta_stop, Psi, dt)
-        cur_obs <- rbind(cur_obs, c(mid_time, new_eta))
-      }
-      
-    }
-    # update observed eta times
-    cur_obs <- cur_obs %>%
-      arrange(time)
-    obs_times <- sort(cur_obs$time)
-    obs_etas <- cur_obs[,2:(nrow(theta_boup)+1)]
-    cur_max_gap = max(cur_obs$time-lag(cur_obs$time), na.rm = TRUE)
-  }
-  return(cur_obs)
-}
-
-
-################################################################################
-# FUNCTIONS FOR AUGMENTING LATENT PROCESS w/ SYNTHETIC VALUES OF AVG ETA 
-################################################################################
-
-# These functions use the exact distribution of avg_eta(s,t) | eta(t_L), eta(t_R)
+# Functions use the distribution of avg_eta(s,t) | eta(t_L), eta(t_R)
 
 # Variance function for average latent factors, eta, over interval from 0 to dt
 var_ou_mean <- function(theta, sigma, dt){
   # calculate variance of the average of etas across interval of length dt
   V <- construct_V(theta, sigma)
-  
+
   term1 <- solve((t(theta)*dt) %*% (t(theta)*dt))
   term2 <- expm(-t(theta)*dt)
   term3 <- diag(nrow(theta)) - t(theta)*dt
-  
+
   term1b <- solve((theta*dt) %*% (theta*dt))
   term2b <- expm(-(theta)*dt)
   term3b <- diag(nrow(theta)) - theta*dt
-  
+
   A <- matrix(V %*% (term1 %*% (term2 - term3)), nrow(theta), nrow(theta))
   B <- matrix(term1b %*% (term2b - term3b) %*% V, nrow(theta), nrow(theta))
   return(A + B)
@@ -666,7 +531,7 @@ var_ou_mean <- function(theta, sigma, dt){
 # Covariance function for average eta over interval from 0 to dt;
 # that is, [avg_eta(s,t), eta(t_L), eta(t_R)]^T
 cov_ou_mean <- function(theta, sigma, time_L, time_s, time_t, time_R){
-  # theta, sigma are ou parameters
+  # theta, sigma are OU parameters
   # t_left, t_right make endpoint of intervals where eta(tL), eta(tR) are known
   # s, t are endpoints of interval for avg eta
   V <- construct_V(theta, sigma)
@@ -675,23 +540,22 @@ cov_ou_mean <- function(theta, sigma, time_L, time_s, time_t, time_R){
   avg_eta_interval_width <- time_t - time_s
   var_avg_eta <- var_ou_mean(theta, sigma, avg_eta_interval_width)
   
-  # Cov(eta(t_L), avg_eta(s, t))
-  term1_L <- -1 / (time_t - time_s) * solve(theta)
-  term2_L <- expm(-theta * (time_t - time_L)) - expm(-theta * (time_s - time_L))
-  cov_etaL_avgeta <- term1_L %*% term2_L %*% V
+  # Cov(eta(t_L), avg_eta(s, t)) 
+  term1 <- -1 / (time_t - time_s) * V %*% solve(t(theta))
+  term2_L <- expm(-t(theta) * (time_t - time_L)) - expm(-t(theta) * (time_s - time_L))
+  cov_etaL_avgeta <- term1 %*% term2_L
   
-  # Cov(avg_eta(s, t), eta(t_R))
-  term1_R <- -1 / (time_t - time_s) * solve(t(theta))
+  # Cov(avg_eta(s, t), eta(t_R)) 
   term2_R <- expm(-t(theta) * (time_R - time_s)) - expm(-t(theta) * (time_R - time_t))
-  cov_avgeta_etaR <- V %*% term1_R %*% term2_R
+  cov_avgeta_etaR <- term1 %*% term2_R
   
   # Cov(eta(t_L), eta(t_R))
-  cov_etaL_etaR <- expm(-theta * (time_R - time_L)) %*% V
+  cov_etaL_etaR <- V %*% expm(-t(theta) * (time_R - time_L))
   
   # Combine into single matrix: Cov(avgeta, eta_L, eta_R)
-  row1 <- cbind(var_avg_eta, t(cov_etaL_avgeta), t(cov_avgeta_etaR))
-  row2 <- cbind(cov_etaL_avgeta, V, cov_etaL_etaR)
-  row3 <- cbind(cov_avgeta_etaR, t(cov_etaL_etaR), V)
+  row1 <- cbind(var_avg_eta, t(cov_etaL_avgeta), cov_avgeta_etaR) 
+  row2 <- cbind(cov_etaL_avgeta, V, cov_etaL_etaR) 
+  row3 <- cbind(t(cov_avgeta_etaR), t(cov_etaL_etaR), V)
   
   return(rbind(row1, row2, row3))
   
@@ -702,7 +566,7 @@ cov_ou_mean <- function(theta, sigma, time_L, time_s, time_t, time_R){
 sample_avg_eta_j <- function(theta, sigma, time_L, time_s, time_t, time_R,
                              eta_L, eta_R, R){
   # etaL, etaR are both 2x1 matrices (or length-2 vecs) with current eta values
-  # R is the number of draw wanted from avg_eta(s,t) | eta(t_L), eta(t_R)
+  # R is the number of draws wanted from avg_eta(s,t) | eta(t_L), eta(t_R)
   
   # covariance matrix of [avg_eta(s,t), eta(t_L), eta(t_R)]^T
   joint_covar <- cov_ou_mean(theta, sigma, time_L, time_s, time_t, time_R)
@@ -715,7 +579,7 @@ sample_avg_eta_j <- function(theta, sigma, time_L, time_s, time_t, time_R,
   # conditional mean of avg_eta | eta(t_L), eta(t_R)
   cond_mean <- block12 %*% solve(block22) %*% matrix(c(eta_L, eta_R), ncol = 1)
   cond_var <- as.matrix(block11 - block12 %*% solve(block22) %*% block21, 2, 2)
-  # average to avoid small numerical errors if variance is tiny
+  # ensure symmetric covar matrix to avoid errors for small numerical reasons
   cond_var <- cond_var %*% t(cond_var) / 2
   
   # sample avg_eta(s,t) | eta(t_L), eta(t_R)
@@ -724,7 +588,6 @@ sample_avg_eta_j <- function(theta, sigma, time_L, time_s, time_t, time_R,
   colnames(res) <- c('r', 'start_time', 'stop_time', 'avg_eta1', 'avg_eta2')
   return(res)
 }
-
 
 # This function is used for augmenting the data with synthetic avg eta values.
 # Draw R+1 samples of the average value of eta acros the interval (s,t) given
@@ -735,7 +598,7 @@ sample_avg_etas <- function(obs_dat, theta, sigma, R){
   # obs_dat is a dataframe with columns labeled 'time', 'eta1', 'eta2' that
   #  contains the information on the observed eta values
   # theta and sigma are OUP parameters
-  # R is the number of sythetic trajectories (plus one with which is truth for simulations)
+  # R is the number of synthetic trajectories (plus one with which is truth for simulations)
   avg_obs <- data.frame(matrix(NA, nrow = 0, ncol = 5,
                                dimnames = list(NULL,
                                                c('r', 'start_time', 'stop_time',
@@ -796,79 +659,73 @@ sample_avg_etas_for_sims <- function(obs_dat, theta, sigma, R){
 }
 
 ################################################################################
-# FUNCTION FOR PLOTTING CROSS/AUTO-CORRELATION OF OU PROCESS OVER GAP TIMES
+# Function for plotting decay in correlation of OU process over gap times
 ################################################################################
 
-# Plot decay in correlation over time for OUP observed across different gap times
-plot_OUP_cor <- function(theta_boup, sigma_boup, time_vec, plot_title){
-  theta_boup_bonus <- theta_boup
-  sigma_boup_bonus <- sigma_boup
+# Plot decay in corr. over time for OUP observed across different gap times
+plot_OUP_cor <- function(theta_boup, sigma_boup, time_vec){
+   
+  if (nrow(theta_boup) != 2){
+    print('Code must be modified to plot a non-bivariate OU process')
+    return(NULL)
+  }
+
   ## construct correlation matrix
-  kron_sum_theta_bonus <- kronsum(theta_boup_bonus, theta_boup_bonus)
-  sigma2_vec_bonus <- matrix(sigma_boup_bonus %*% t(sigma_boup_bonus), ncol = 1)
+  kron_sum_theta <- kronsum(theta_boup, theta_boup)
+  sigma2_vec <- matrix(sigma_boup %*% t(sigma_boup), ncol = 1)
   ni <- length(time_vec)
   
-  Omega_bonus <- calc_precision_cpp(kron_sum_theta = kron_sum_theta_bonus,
-                                    theta = theta_boup_bonus, theta_t = t(theta_boup_bonus),
-                                    sigma2_vec = sigma2_vec_bonus, ni = ni,
-                                    times = time_vec)
-  Psi_bonus <- cov2cor(solve(Omega_bonus))
+  Omega <- calc_precision_cpp(kron_sum_theta = kron_sum_theta,
+                              theta = theta_boup, theta_t = t(theta_boup),
+                              sigma2_vec = sigma2_vec, ni = ni,
+                              times = time_vec)
+  Psi <- cov2cor(solve(Omega))
   
   ## extract relevant blocks of correlation matrix
-  # cor(eta_1(t), eta_1(s))
-  cor_eta1t_eta1s_bonus <- data.frame(t_minus_s = time_vec,
-                                      cor = Psi_bonus[1,seq(from = 1, to = ncol(Psi_bonus), by = 2)])
-  
-  # cor(eta_1(t), eta_2(s))
-  cor_eta2t_eta2s_bonus <- data.frame(t_minus_s = time_vec,
-                                      cor = Psi_bonus[2,seq(from = 2, to = ncol(Psi_bonus), by = 2)])
-  
-  # cor(eta_1(t), eta_2(s)), s <= t
-  cor_eta1t_eta2s_bonus <- data.frame(t_minus_s = time_vec,
-                                      cor = Psi_bonus[1,seq(from = 2, to = ncol(Psi_bonus), by = 2)])
-  
-  # cor(eta_1(a), eta_2(t)), s <= t
-  cor_eta1s_eta2t_bonus <- data.frame(t_minus_s = time_vec,
-                                      cor = Psi_bonus[2,seq(from = 1, to = ncol(Psi_bonus), by = 2)])
+  cor_df = data.frame(t_minus_s = time_vec, # gap times
+                      cor_eta1s_eta1t = Psi[1,seq(from = 1, to = ncol(Psi), by = 2)],
+                      cor_eta2s_eta2t = Psi[2,seq(from = 2, to = ncol(Psi), by = 2)],
+                      cor_eta1s_eta2t = Psi[1,seq(from = 2, to = ncol(Psi), by = 2)],
+                      cor_eta1t_eta2s = Psi[2,seq(from = 1, to = ncol(Psi), by = 2)])
   
   ggplot() +
     geom_abline(slope = 0, intercept = 0, linetype = 'dotted') +
-    geom_point(data = cor_eta1t_eta1s_bonus,
-               aes(x = t_minus_s, y = cor, color = 'cor(eta1(t), eta1(s))'),
-               size = 1, shape = 21) +
-    geom_line(data = cor_eta1t_eta1s_bonus,
-              aes(x = t_minus_s, y = cor, color = 'cor(eta1(t), eta1(s))')) +
-    geom_point(data = cor_eta2t_eta2s_bonus,
-               aes(x = t_minus_s, y = cor, color = 'cor(eta2(t), eta2(s))'),
-               size = 1, shape = 22) +
-    geom_line(data = cor_eta2t_eta2s_bonus,
-              aes(x = t_minus_s, y = cor, color = 'cor(eta2(t), eta2(s))')) +
-    geom_point(data = cor_eta1t_eta2s_bonus,
-               aes(x = t_minus_s, y = cor, color = 'cor(eta1(t), eta2(s))'),
-               size = 1, shape = 23) +
-    geom_line(data = cor_eta1t_eta2s_bonus,
-              aes(x = t_minus_s, y = cor, color = 'cor(eta1(t), eta2(s))')) +
-    geom_point(data = cor_eta1s_eta2t_bonus,
-               aes(x = t_minus_s, y = cor, color = 'cor(eta1(s), eta2(t))'),
-               size = 1, shape = 24) +
-    geom_line(data = cor_eta1s_eta2t_bonus,
-              aes(x = t_minus_s, y = cor, color = 'cor(eta1(s), eta2(t))')) +
-    theme_bw() +
-    labs(x = '|t - s|, s <= t', y = 'correlation',
-         subtitle = paste0(plot_title)) +
-    scale_color_manual(values = c('purple', 'dodgerblue', 'orange', 'tomato'))
+    geom_line(data = cor_df, lwd = 1,
+              aes(x = t_minus_s, y = cor_eta1s_eta1t, color = 'cor(eta1(s), eta1(t))')) +
+    geom_line(data = cor_df, lwd = 1,
+              aes(x = t_minus_s, y = cor_eta2s_eta2t, color = 'cor(eta2(s), eta2(t))')) +
+    geom_line(data = cor_df, lwd = 1,
+              aes(x = t_minus_s, y = cor_eta1s_eta2t, color = 'cor(eta1(s), eta2(t))')) +
+    geom_line(data = cor_df, lwd = 1,
+              aes(x = t_minus_s, y = cor_eta1t_eta2s, color = 'cor(eta1(t), eta2(s))')) +
+    theme_bw() + guides(fill = "none") +
+    labs(x = expression('t - s, s'<='t'), y = 'Correlation') +
+    scale_color_manual(values = c("#E2D200", "#DD8D29", "#6C3E59", "#46ACC8"),
+                       name = ' ',
+                       labels = c(expression('cor('~eta[1](s)~','~eta[1](t)~')'),
+                                  expression('cor('~eta[1](s)~','~eta[2](t)~')'),
+                                  expression('cor('~eta[1](t)~','~eta[2](s)~')'),
+                                  expression('cor('~eta[2](s)~','~eta[2](t)~')'))) +
+    scale_fill_manual(values = c("#E2D200", "#DD8D29", "#6C3E59", "#46ACC8"),
+                      name = ' ',
+                      labels = c(expression('cor('~eta[1](s)~','~eta[1](t)~')'),
+                                 expression('cor('~eta[1](s)~','~eta[2](t)~')'),
+                                 expression('cor('~eta[1](t)~','~eta[2](s)~')'),
+                                 expression('cor('~eta[2](s)~','~eta[2](t)~')'))) +
+    coord_cartesian(x = c(0, max(time_vec)), y = c(-1, 1))
 } 
 
 ################################################################################
-# FUNCTION FOR PREDICTING FACTOR SCORES FROM LONGITUDINAL OU FACTOR MODEL
+# Predict factor scores from longitudinal OU factor model
 ################################################################################
 
 # Predict factor scores for 1 subject using dynamic (OU) factor model
 predict_eta_i <- function(ni, Lambda, Psi_i, Y_i, Sigma_star_i){
   # ni = number of measurement occasions for subject i
-  # Lambda = estimated loadings matrix
-  # Psi_i = esitmated OU covariance matrix for subject i
+  # Lambda = estimated (or true) loadings matrix
+  # Psi_i = estimated (or true) OU covariance matrix for subject i
   # Y_i = observed data for subject i (vector of length k x n_i)
+  # Sigma_star_i = estimated (or true) covariance matrix for Y_i
   
   # and now predict factor scores
   Lambda_mat <- kronecker(diag(ni), Lambda)

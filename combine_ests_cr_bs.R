@@ -6,7 +6,7 @@
 #  bootstrapped and augmented datasets following the von Hippel approach.
 
 ################################################################################
-## Read in results from fitted models
+## Read in results from fitted models (bootstrapped)
 ################################################################################
 
 results_allB <- matrix(nrow = 0, ncol = 5,
@@ -14,8 +14,8 @@ results_allB <- matrix(nrow = 0, ncol = 5,
                                                'beta2')))
 
 for (b in 1:B){
-  results_b <- read.csv(paste0(wd, 'data/bootstrapped_ests/boot_results_setting',
-                               setting, '_subsample', b, '.csv'))
+  results_b <- read.csv(paste0(wd, 'stage2_results/bootstrapped_ests/boot_results_setting',
+                               setting, '_R', R, '_subsample', b, '.csv'))
   results_b <- results_b %>%
     dplyr::select(c('B', 'M', paste0('beta', 0:2, '_m')))
   results_allB <- rbind(results_allB, results_b)
@@ -96,12 +96,23 @@ MSS <- calc_mss(coef_names, results = results_allB)
 VAR <- calc_var(MSB = MSS$MSB, MSW = MSS$MSW)
 
 ################################################################################
+## Point and variance/covariance estimates (using Rubin's Rule)
+################################################################################
+
+# Read in results from fitted models
+results_RR <- read.csv(paste0(wd, 'stage2_results/nonbootstrapped_ests/results_setting',
+                              setting, '_R', R, '.csv'))
+
+
+################################################################################
 # Save results
 ################################################################################
 
 final_results <- data.frame(variable = paste0('beta', 0:2),
-                            est = c(beta0_BM, beta1_BM, beta2_BM),
-                            se = sqrt(diag(VAR$var)))
+                            est_vh = c(beta0_BM, beta1_BM, beta2_BM),
+                            se_vh = sqrt(diag(VAR$var)), # von Hippel
+                            est_rr = results_RR$est_rr,
+                            se_rr = results_RR$se_rr) # Rubin's rule
 
 
 

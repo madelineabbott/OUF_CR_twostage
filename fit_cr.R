@@ -119,9 +119,32 @@ for (iter in 1:max_iter){
 
 cat('   Done with point estimation \n')
 
-# point estimates with SEs for this bootstrapped subsample of original data
-results_b2 <- data.frame(B = b, M = 1:M,
-                         beta0_m, beta1_m, beta2_m,
-                         beta0_se_m, beta1_se_m, beta2_se_m)
+cat("   Pooling estimates with Rubin's rule \n")
+
+# pool point estimates and calculate standard errors using Rubin's rule
+unpooled_res <- data.frame(term = rep(paste0('beta', 0:2), each = M),
+                           estimate = c(beta0_m, beta1_m, beta2_m),
+                           std.error = c(beta0_se_m, beta1_se_m, beta2_se_m))
+# between variance
+between <- unpooled_res %>%
+  group_by(term) %>%
+  summarize(between_var = var(estimate))
+Bvar <- between$between_var
+
+# within variance
+within <- unpooled_res %>%
+  group_by(term) %>%
+  summarize(within_var = mean(std.error^2))
+Wvar <- within$within_var
+
+# pooled variance
+pooled_var <- Wvar + (1 + 1/M) * Bvar
+
+# point estimates with SEs for original data according to (sort of) Rubin's Rule
+results_rr <- data.frame(variable = paste0('beta', 0:2),
+                         est_rr = c(mean(beta0_m), mean(beta1_m), mean(beta2_m)),
+                         se_rr = sqrt(pooled_var))
+
+
 
 

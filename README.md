@@ -11,7 +11,7 @@ For more details on stage 1, see https://arxiv.org/abs/2307.15681.
 
 In **stage 2**, the cumulative risk model is fit.  Stage 2 uses results from stage 1 to carry out the following steps:
 
-1. Factor scores are predicted at the measurement occasions using the dynamic factor model parameters.
+1. Factor scores are predicted at the measurement occasions using the OU factor model parameters.
 2. Individuals within the dataset are bootstrapped.
 3. Synthetic average values of the latent process are generated for each event interval, conditional on the factor scores predicted at measurement occasions, for each bootstrapped dataset.
 4. A weighted Poisson regression model is fit to each bootstrapped dataset augmented with the synthetic average values of the latent process.

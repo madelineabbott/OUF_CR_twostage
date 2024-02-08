@@ -3,7 +3,11 @@ Code for fitting dynamic Ornstein-Uhlenbeck (OU) factor model and cumulative ris
 
 To fit this model, first run **stage1.R** and then run **stage2.R**.
 
-In **stage 1**, the OU factor model is fit using just data on the longitudinal outcomes.  More details on stage 1 estimation can be found [here](https://github.com/madelineabbott/OUF).
+In **stage 1**, the OU factor model is fit using just data on the longitudinal outcomes.  The estimation algorithm for stage 1 uses a small amount of C++ code, some of which can be installed using
+```
+devtools::install_github("madelineabbott/OUFgrad")
+```
+For more details on stage 1, see https://arxiv.org/abs/2307.15681.
 
 In **stage2**, the cumulative risk model is fit.  Stage 2 uses results from stage 1 to carry out the following steps:
 

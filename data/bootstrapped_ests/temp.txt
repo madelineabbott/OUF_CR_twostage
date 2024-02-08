@@ -1,3 +1,0 @@
-Results (point estimates and standard errors) for the weighted Poisson models
-fit to each bootstrapped and augmented dataset will be saved in this folder.
-This file serves only as a placeholder.

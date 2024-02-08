@@ -9,7 +9,7 @@ devtools::install_github("madelineabbott/OUFgrad")
 ```
 For more details on stage 1, see https://arxiv.org/abs/2307.15681.
 
-In **stage2**, the cumulative risk model is fit.  Stage 2 uses results from stage 1 to carry out the following steps:
+In **stage 2**, the cumulative risk model is fit.  Stage 2 uses results from stage 1 to carry out the following steps:
 
 1. Factor scores are predicted at the measurement occasions using the dynamic factor model parameters.
 2. Individuals within the dataset are bootstrapped.

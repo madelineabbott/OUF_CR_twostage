@@ -3,7 +3,7 @@
 ################################################################################
 
 # To fit this model, will need to install C++ code (contains gradient formulas)
-#devtools::install_github("https://github.com/madelineabbott/FABOUP_fast.git", ref="main")
+#devtools::install_github("https://github.com/madelineabbott/OUFgrad.git", ref="main")
 
 # Assume that we want to fit an OUF model with p latent factors
 cap_theta <- 7 # upper bound for theta, based on gap between meas. occasions
